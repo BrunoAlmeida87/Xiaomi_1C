@@ -23,3 +23,4 @@ captures/
 *.b64
 *.log
 *.tsbuildinfo
+dist-portable/

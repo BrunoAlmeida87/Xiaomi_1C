@@ -36,6 +36,10 @@ Home são preservados.
 
 ## Executar no Windows
 
+**Mais simples:** baixe `Xiaomi1C-portatil.zip` (gerado por `python packaging/make_portable.py`), extraia e dê dois cliques em `Iniciar.bat`. Só exige o Python 3.11+ instalado: a interface já vem compilada.
+
+Para desenvolvimento:
+
 Requisitos: Python 3.11+ e Node.js 20+.
 
 ```powershell
