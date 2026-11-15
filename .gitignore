@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Dados locais e segredos — NUNCA versionar
+data/
+*.db
+*.sqlite
+.env
+.env.*
+secrets*.json
+config.local.json
+captures/
+*.b64
+*.log
+*.tsbuildinfo

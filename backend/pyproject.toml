@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xiaomi1c"
+version = "0.1.0"
+description = "Controle local do Xiaomi Robot Vacuum-Mop 1C (dreame.vacuum.mc1808)"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "cryptography>=42",
+  "keyring>=24",
+  "pydantic>=2.5",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+desktop = ["pywebview>=5.0"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+xiaomi1c = "xiaomi1c.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["xiaomi1c*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
