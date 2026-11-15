@@ -40,15 +40,21 @@ echo ============================================================
 echo  Xiaomi 1C Control - primeira execucao
 echo  Preparando o ambiente (precisa de internet, so desta vez).
 echo ============================================================
+rem Cada candidato e EXECUTADO para confirmar que funciona e e 3.10+.
+rem (O lancador "py" pode apontar para um Python desinstalado.)
 set "PY="
-where py >nul 2>nul && set "PY=py -3"
-if not defined PY (
-  where python >nul 2>nul && set "PY=python"
+set "PYTXT="
+if exist "%~dp0python.txt" set /p PYTXT=<"%~dp0python.txt"
+if defined PYTXT set "PYTXT=%PYTXT:"=%"
+if defined PYTXT call :try "%PYTXT%"
+if not defined PY call :try python
+if not defined PY call :try py -3
+if not defined PY call :try python3
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*" "%ProgramFiles%\Python3*" "C:\Python3*" "D:\Python3*" "E:\Python3*") do (
+  if not defined PY if exist "%%~D\python.exe" call :try "%%~D\python.exe"
 )
 if not defined PY goto nopython
-
-%PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
-if errorlevel 1 goto oldpython
+echo Usando Python: %PY%
 
 %PY% -m venv "%VENV%"
 if errorlevel 1 goto fail
@@ -70,17 +76,29 @@ if errorlevel 1 (
 )
 exit /b 0
 
+:try
+%* -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+if not errorlevel 1 set "PY=%*"
+exit /b 0
+
 :nopython
 echo.
-echo Python nao encontrado.
-echo Instale o Python 3.11 ou superior em https://www.python.org/downloads/
-echo (marque a opcao "Add python.exe to PATH") e execute este arquivo de novo.
-pause
-exit /b 1
-
-:oldpython
+echo Nenhum Python 3.10+ FUNCIONAL foi encontrado neste computador.
 echo.
-echo Seu Python e anterior a 3.10. Instale o Python 3.11+ em https://www.python.org/downloads/
+echo Diagnostico:
+echo  - "python" no PATH:
+where python 2>nul || echo      nenhum
+echo  - Pythons registrados no lancador "py":
+py -0p 2>nul || echo      nenhum
+echo.
+echo Se algum caminho acima nao existe mais (ex.: E:\python311), o Python foi
+echo desinstalado ou a unidade mudou. Solucao:
+echo  1. Instale o Python 3.11+ em https://www.python.org/downloads/
+echo     marcando "Add python.exe to PATH" e "py launcher".
+echo  2. Feche esta janela e execute o Iniciar.bat novamente.
+echo.
+echo Alternativa: crie um arquivo python.txt nesta pasta contendo o caminho
+echo completo do python.exe (ex.: C:\Python312\python.exe).
 pause
 exit /b 1
 
@@ -127,6 +145,15 @@ Se o Windows exibir "O Windows protegeu o computador" (SmartScreen), clique em
 abri-lo no Bloco de Notas para conferir o que ele faz.
 Se o Firewall do Windows perguntar, permita o acesso em redes PRIVADAS
 (o robô é acessado pela porta UDP 54321 da rede local).
+
+PROBLEMAS COM O PYTHON
+- "Unable to create process using 'E:\\python311\\python.exe'..." ou
+  "Nenhum Python 3.10+ FUNCIONAL": o Windows ainda tem registro de um Python
+  que foi desinstalado/movido. Reinstale o Python 3.11+ (python.org) marcando
+  "Add python.exe to PATH" e execute o Iniciar.bat de novo.
+- Se o Python estiver instalado num local incomum, crie nesta pasta um arquivo
+  python.txt contendo só o caminho completo do python.exe.
+- Se a primeira execução falhar no meio, apague a pasta .venv daqui e tente de novo.
 
 OUTROS ARQUIVOS
 - Procurar-robo.bat : procura dispositivos Xiaomi na rede (somente leitura).
