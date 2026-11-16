@@ -75,6 +75,13 @@ def create_app(core: AppCore, static_dir: Path | None = None, lifespan=None) -> 
     app = FastAPI(title="Xiaomi 1C Control", version="0.1.0", lifespan=lifespan)
     qr_state: dict[str, Any] = {"login": None}
 
+    @app.exception_handler(Exception)
+    async def unexpected(_request: Request, exc: Exception):
+        log.error("Erro interno não tratado", exc_info=exc)
+        return JSONResponse({"detail": f"Erro interno ({type(exc).__name__}): {exc}. "
+                                       "Detalhes completos em %LOCALAPPDATA%\\Xiaomi1C\\logs\\xiaomi1c.log"},
+                            status_code=500)
+
     @app.middleware("http")
     async def guard(request: Request, call_next):
         host = (request.headers.get("host") or "").rsplit(":", 1)[0]
@@ -98,6 +105,12 @@ def create_app(core: AppCore, static_dir: Path | None = None, lifespan=None) -> 
             raise HTTPException(504, f"Falha de comunicação com o robô: {exc}") from exc
         except CloudError as exc:
             raise HTTPException(502, f"Xiaomi Cloud: {exc}") from exc
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001 - devolver erro legível em vez de 500 em texto
+            log.exception("Erro inesperado em %s", getattr(fn, "__name__", fn))
+            raise HTTPException(500, f"Erro interno ({type(exc).__name__}): {exc}. Detalhes no log: "
+                                     "%LOCALAPPDATA%\\Xiaomi1C\\logs\\xiaomi1c.log") from exc
 
     async def run(fn, *args, **kwargs):
         return await asyncio.to_thread(guarded, fn, *args, **kwargs)

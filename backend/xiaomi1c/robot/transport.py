@@ -112,30 +112,33 @@ class MiioTransport:
         return self._msg_id
 
     # ------------------------------------------------------------------ public
-    def send(self, method: str, params: Any = None) -> Any:
+    def send(self, method: str, params: Any = None, retries: int | None = None, timeout: float | None = None) -> Any:
         """Envia um comando e devolve ``result``. Faz handshake e retentativas."""
+        retries = retries or self.retries
         with self._lock:
             last_exc: Exception | None = None
-            for attempt in range(1, self.retries + 1):
+            for attempt in range(1, retries + 1):
                 try:
                     if self._device_id is None or attempt > 1:
                         self.handshake()
-                    return self._send_once(method, params)
+                    return self._send_once(method, params, timeout)
                 except DeviceError:
                     raise
                 except (CommunicationError, ProtocolError, OSError) as exc:
                     last_exc = exc
-                    log.warning("Falha na tentativa %d/%d de '%s': %s", attempt, self.retries, method, exc)
+                    log.warning("Falha na tentativa %d/%d de '%s': %s", attempt, retries, method, exc)
                     time.sleep(min(0.5 * attempt, 2.0))
-            raise CommunicationError(f"Falha após {self.retries} tentativas: {last_exc}")
+            raise CommunicationError(f"Falha após {retries} tentativa(s): {last_exc}")
 
-    def _send_once(self, method: str, params: Any) -> Any:
+    def _send_once(self, method: str, params: Any, timeout: float | None = None) -> Any:
         assert self._device_id is not None
         msg_id = self._next_id()
         payload = {"id": msg_id, "method": method, "params": params if params is not None else []}
         packet = build_packet(payload, self._token, self._device_id, self._stamp())
         log.debug("-> %s %s", method, params)
         s = self._socket()
+        if timeout:
+            s.settimeout(timeout)
         try:
             s.sendto(packet, (self.ip, PORT))
             while True:

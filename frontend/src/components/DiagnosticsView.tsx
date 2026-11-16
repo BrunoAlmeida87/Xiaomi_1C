@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-interface Probe { timestamp: number; simulated: boolean; info: Record<string, unknown>; model_confirmed: boolean; readable: { siid: number; piid: number; value: unknown; known_as: string | null }[]; unknown_readable: unknown[]; error_codes: Record<string, number> }
+interface Probe { timestamp: number; simulated: boolean; info: Record<string, unknown>; model_confirmed: boolean; readable: { siid: number; piid: number; value: unknown; known_as: string | null }[]; unknown_readable: unknown[]; error_codes: Record<string, number>; silent_siids?: number[]; anomalies?: string[] }
 interface Audit { id: number; ts: number; command: string; ok: boolean; simulated: boolean; data: { sent: unknown; response: unknown } }
 
 export function DiagnosticsView() {
@@ -25,6 +25,9 @@ export function DiagnosticsView() {
           <>
             <p>Modelo: <b className="mono">{String(probe.info.model ?? "?")}</b> — {probe.model_confirmed ? <span className="ok">confirmado mc1808</span> : <span className="bad">não confirmado</span>} · Firmware <b>{String(probe.info.fw_ver ?? "?")}</b> {probe.simulated && <span className="badge sim">SIMULADO</span>}</p>
             <p className="small">{probe.readable.length} propriedades legíveis; {probe.unknown_readable.length} fora da base de conhecimento. Códigos de erro: {JSON.stringify(probe.error_codes)}</p>
+            {!!probe.silent_siids?.length && <p className="small muted">Serviços sem resposta (normal para siids inexistentes): {probe.silent_siids.join(", ")}</p>}
+            {!!probe.anomalies?.length && <details><summary className="small warn">{probe.anomalies.length} resposta(s) fora do padrão</summary><pre>{probe.anomalies.join("\n")}</pre></details>}
+            <details><summary className="small">Copiar resultado completo (JSON, sem token)</summary><pre>{JSON.stringify(probe, null, 2)}</pre></details>
             <table>
               <thead><tr><th>siid.piid</th><th>Conhecida como</th><th>Valor bruto</th></tr></thead>
               <tbody>{probe.readable.map((r) => (

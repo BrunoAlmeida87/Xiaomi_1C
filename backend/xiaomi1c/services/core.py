@@ -133,10 +133,14 @@ class AppCore:
             return None
         try:
             raw = robot.read_props()
+            status = normalize_status(raw, robot.simulated)
         except (CommunicationError, DeviceError, OSError) as exc:
             self._set_connection("offline", str(exc))
             return None
-        status = normalize_status(raw, robot.simulated)
+        except Exception as exc:  # noqa: BLE001 - nunca derrubar o polling
+            log.exception("Resposta inesperada ao ler o status")
+            self._set_connection("offline", f"Resposta inesperada do robô: {type(exc).__name__}: {exc}")
+            return None
         self.status = status
         self._set_connection("online", None)
         self.db.add_snapshot(status)
@@ -147,7 +151,11 @@ class AppCore:
     def _loop(self) -> None:
         backoff = 0.0
         while not self._stop.is_set():
-            st = self.poll_once()
+            try:
+                st = self.poll_once()
+            except Exception:  # noqa: BLE001
+                log.exception("Erro no ciclo de atualização")
+                st = None
             interval = max(1.0, float(self.settings.poll_interval_s))
             if st is None and self.robot is not None:
                 backoff = min(60.0, backoff * 2 if backoff else interval)

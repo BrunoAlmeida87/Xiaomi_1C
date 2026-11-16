@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from .device import MAX_PROPS_PER_REQUEST, RobotBackend
+from .transport import DeviceError
 from .spec_1c import ERROR_CODES, PROPS_BY_KEY, describe_value
 
 log = logging.getLogger(__name__)
@@ -68,23 +69,51 @@ def probe(robot: RobotBackend, max_siid: int = 30, max_piid: int = 25, delay: fl
     """
     found: list[dict[str, Any]] = []
     errors: dict[str, int] = {}
+    silent_siids: list[int] = []
+    anomalies: list[str] = []
     info: dict[str, Any] = {}
     try:
         info = robot.info()
+        if not isinstance(info, dict):
+            anomalies.append(f"miIO.info devolveu {type(info).__name__}: {str(info)[:200]}")
+            info = {}
     except Exception as exc:  # noqa: BLE001 - registrar e seguir
         info = {"error": str(exc)}
     for siid in range(1, max_siid + 1):
         items = [{"did": f"{siid}.{piid}", "siid": siid, "piid": piid} for piid in range(1, max_piid + 1)]
         for i in range(0, len(items), MAX_PROPS_PER_REQUEST):
+            chunk = items[i : i + MAX_PROPS_PER_REQUEST]
             try:
-                res = robot.get_raw_properties(items[i : i + MAX_PROPS_PER_REQUEST])
+                res = robot.get_raw_properties(chunk, quick=True)
+            except DeviceError as exc:
+                # O robô respondeu, mas recusou o lote: pergunta item a item.
+                log.info("Probe siid %s: lote recusado (%s); consultando individualmente", siid, exc)
+                res = []
+                for item in chunk:
+                    try:
+                        one = robot.get_raw_properties([item], quick=True)
+                        res.extend(one if isinstance(one, list) else [])
+                    except DeviceError as exc1:
+                        res.append({**item, "code": getattr(exc1, "code", "erro")})
+                    except Exception:  # noqa: BLE001
+                        res.append({**item, "code": "sem_resposta"})
             except Exception as exc:  # noqa: BLE001
-                log.warning("Probe siid %s falhou: %s", siid, exc)
+                # Sem resposta para este siid: não insistir nos demais piids dele.
+                log.warning("Probe siid %s sem resposta: %s", siid, exc)
+                silent_siids.append(siid)
+                break
+            if not isinstance(res, list):
+                anomalies.append(f"siid {siid}: resposta {type(res).__name__}: {str(res)[:200]}")
                 continue
-            for r in res:
+            for idx, r in enumerate(res):
+                if not isinstance(r, dict):
+                    anomalies.append(f"siid {siid}: item inesperado {str(r)[:120]}")
+                    continue
+                req = chunk[idx] if idx < len(chunk) and len(res) == len(chunk) else {}
                 code = r.get("code")
                 if code == 0:
-                    found.append({"siid": r["siid"], "piid": r["piid"], "value": r.get("value")})
+                    found.append({"siid": r.get("siid", req.get("siid")), "piid": r.get("piid", req.get("piid")),
+                                  "value": r.get("value")})
                 else:
                     errors[str(code)] = errors.get(str(code), 0) + 1
             if delay:
@@ -100,4 +129,6 @@ def probe(robot: RobotBackend, max_siid: int = 30, max_piid: int = 25, delay: fl
         "readable": found,
         "unknown_readable": [f for f in found if not f["known_as"]],
         "error_codes": errors,
+        "silent_siids": silent_siids,
+        "anomalies": anomalies[:50],
     }

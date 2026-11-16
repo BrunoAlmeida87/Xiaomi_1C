@@ -92,7 +92,7 @@ class SimulatedRobot(RobotBackend):
         return {"model": "dreame.vacuum.mc1808", "fw_ver": "4.3.3_1122 (simulado)", "hw_ver": "SIM",
                 "mac": "00:00:00:00:00:00", "simulated": True}
 
-    def get_raw_properties(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def get_raw_properties(self, items: list[dict[str, Any]], quick: bool = False) -> list[dict[str, Any]]:
         self.tick()
         out = []
         with self._lock:

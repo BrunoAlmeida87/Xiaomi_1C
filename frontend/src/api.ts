@@ -11,7 +11,13 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Resposta não-JSON (ex.: erro interno em texto puro): mostra o texto.
+    throw new ApiError(res.status, `HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
   if (!res.ok) {
     const d = data?.detail;
     const msg = typeof d === "string" ? d : d?.message ?? `HTTP ${res.status}`;

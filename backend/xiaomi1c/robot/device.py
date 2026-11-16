@@ -15,10 +15,12 @@ SENSITIVE_INFO_KEYS = {"token", "ap", "netif"}  # ap/netif contêm SSID/BSSID e 
 MAX_PROPS_PER_REQUEST = 10  # o 1C rejeita lotes grandes (python-miio usa 10)
 
 
-def sanitize_info(info: dict[str, Any]) -> dict[str, Any]:
+def sanitize_info(info: Any) -> dict[str, Any]:
+    if not isinstance(info, dict):
+        return {"raw": str(info)[:300]}
     out = {k: v for k, v in info.items() if k not in SENSITIVE_INFO_KEYS}
-    ap = info.get("ap") or {}
-    netif = info.get("netif") or {}
+    ap = info.get("ap") if isinstance(info.get("ap"), dict) else {}
+    netif = info.get("netif") if isinstance(info.get("netif"), dict) else {}
     if ap:
         out["wifi_rssi"] = ap.get("rssi")
     if netif:
@@ -35,8 +37,8 @@ class RobotBackend(abc.ABC):
     def info(self) -> dict[str, Any]: ...
 
     @abc.abstractmethod
-    def get_raw_properties(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Recebe [{did, siid, piid}] e devolve [{did, siid, piid, code, value?}]."""
+    def get_raw_properties(self, items: list[dict[str, Any]], quick: bool = False) -> list[dict[str, Any]]:
+        """``quick``: uma única tentativa, timeout curto (usado no diagnóstico). Recebe [{did, siid, piid}] e devolve [{did, siid, piid, code, value?}]."""
 
     @abc.abstractmethod
     def set_raw_property(self, siid: int, piid: int, value: Any) -> dict[str, Any]: ...
@@ -70,7 +72,9 @@ class RealRobot(RobotBackend):
     def info(self) -> dict[str, Any]:
         return sanitize_info(self.transport.send("miIO.info") or {})
 
-    def get_raw_properties(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def get_raw_properties(self, items: list[dict[str, Any]], quick: bool = False) -> list[dict[str, Any]]:
+        if quick:
+            return self.transport.send("get_properties", items, retries=1, timeout=3.0) or []
         return self.transport.send("get_properties", items) or []
 
     def set_raw_property(self, siid: int, piid: int, value: Any) -> dict[str, Any]:
