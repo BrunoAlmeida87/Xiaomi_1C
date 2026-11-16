@@ -32,3 +32,19 @@ def test_encrypted_params_shape():
     out = crypto.build_encrypted_params("https://de.api.io.mi.com/app/home/device_list", "POST", sn, nonce, {"data": "{}"}, ssec)
     assert set(out) == {"data", "rc4_hash__", "signature", "ssecurity", "_nonce"}
     assert crypto.decrypt_rc4(sn, out["data"]) == b"{}"
+
+
+def test_list_devices_falls_back_to_homes():
+    from xiaomi1c.cloud.client import CloudSession, XiaomiCloud
+
+    cloud = XiaomiCloud(CloudSession("1", "c3M=", "tok"))
+    responses = {
+        "/home/device_list": {"result": {"list": [{"did": "9", "model": "yeelink.light", "token": "t9"}]}},
+        "/v2/homeroom/gethome": {"result": {"homelist": [{"id": "77", "uid": 123}], "share_home_list": []}},
+        "/v2/home/home_device_list": {"result": {"device_info": [
+            {"did": "42", "name": "Robô", "model": "dreame.vacuum.mc1808", "token": "abc", "localip": "192.168.0.9"}]}},
+    }
+    cloud.call = lambda server, path, data: responses[path]
+    devs = {d["did"]: d for d in cloud.list_devices("us")}
+    assert set(devs) == {"9", "42"}
+    assert devs["42"]["uid"] == 123 and devs["42"]["localip"] == "192.168.0.9" and devs["42"]["server"] == "us"

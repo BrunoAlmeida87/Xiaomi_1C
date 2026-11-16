@@ -174,13 +174,51 @@ class XiaomiCloud:
         except (ValueError, json.JSONDecodeError) as exc:
             raise CloudError(f"Resposta indecifrável em {path}") from exc
 
+    @staticmethod
+    def _device(d: dict[str, Any], server: str, uid: Any = None) -> dict[str, Any]:
+        return {"did": str(d.get("did")), "name": d.get("name"), "model": d.get("model"), "localip": d.get("localip"),
+                "mac": d.get("mac"), "uid": d.get("uid") or uid, "isOnline": d.get("isOnline"),
+                "token": d.get("token"), "server": server}
+
     def list_devices(self, server: str) -> list[dict[str, Any]]:
-        """Lista dispositivos. O campo ``token`` é sensível e NÃO deve sair do backend."""
-        resp = self.call(server, "/home/device_list", {"getVirtualModel": False, "getHuamiDevices": 0})
-        devices = (resp.get("result") or {}).get("list") or []
-        return [{"did": d.get("did"), "name": d.get("name"), "model": d.get("model"), "localip": d.get("localip"),
-                 "mac": d.get("mac"), "uid": d.get("uid"), "isOnline": d.get("isOnline"), "token": d.get("token"),
-                 "server": server} for d in devices]
+        """Lista dispositivos. O campo ``token`` é sensível e NÃO deve sair do backend.
+
+        Tenta o endpoint clássico ``/home/device_list`` e, se vier vazio, o método
+        por "casas" (``/v2/homeroom/gethome`` + ``/v2/home/home_device_list``), usado
+        pelas versões recentes do Xiaomi-cloud-tokens-extractor.
+        """
+        found: dict[str, dict[str, Any]] = {}
+        try:
+            resp = self.call(server, "/home/device_list", {"getVirtualModel": False, "getHuamiDevices": 0})
+            for d in (resp.get("result") or {}).get("list") or []:
+                found[str(d.get("did"))] = self._device(d, server)
+        except CloudError as exc:
+            log.info("device_list (%s) falhou: %s", server, exc)
+        if not any(d.get("model") == "dreame.vacuum.mc1808" for d in found.values()):
+            for dev in self._devices_by_home(server):
+                found.setdefault(dev["did"], dev)
+        return list(found.values())
+
+    def _devices_by_home(self, server: str) -> list[dict[str, Any]]:
+        try:
+            homes = self.call(server, "/v2/homeroom/gethome",
+                              {"fg": True, "fetch_share": True, "fetch_share_dev": True, "limit": 300, "app_ver": 7})
+        except CloudError as exc:
+            log.info("gethome (%s) falhou: %s", server, exc)
+            return []
+        result = homes.get("result") or {}
+        out: list[dict[str, Any]] = []
+        for home in (result.get("homelist") or []) + (result.get("share_home_list") or []):
+            try:
+                resp = self.call(server, "/v2/home/home_device_list",
+                                 {"home_id": int(home["id"]), "home_owner": home.get("uid"), "limit": 200,
+                                  "get_split_device": True, "support_smart_home": True})
+            except (CloudError, KeyError, ValueError) as exc:
+                log.info("home_device_list (%s) falhou: %s", server, exc)
+                continue
+            for d in (resp.get("result") or {}).get("device_info") or []:
+                out.append(self._device(d, server, uid=home.get("uid")))
+        return out
 
     def find_devices(self, servers: list[str] | None = None) -> list[dict[str, Any]]:
         found = []
